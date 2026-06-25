@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fractal Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #111; color: #eee; font-family: monospace; }
+canvas { display: block; width: 100%; height: 100%; }
+#info { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.3); font:11px/1.4 monospace; text-align:center; pointer-events:none; text-shadow:0 0 3px #000; }
+#panel { position:fixed; top:16px; right:16px; display:flex; flex-direction:column; gap:6px; background:rgba(0,0,0,0.65); padding:10px; border-radius:8px; }
+#panel label { color:rgba(255,255,255,0.6); font:10px/1.4 monospace; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+#panel input, #panel select { width:100px; cursor:pointer; background:#222; color:#aaa; border:1px solid #444; border-radius:4px; padding:2px 4px; font:10px monospace; }
+#panel button { font:10px monospace; background:rgba(255,255,255,0.08); color:#aaa; border:1px solid #444; border-radius:4px; padding:3px 8px; cursor:pointer; }
+#panel button:hover { background:rgba(255,255,255,0.15); color:#fff; }
+#panel a { color:#555; font:9px monospace; text-align:center; margin-top:2px; }
+#zoomLbl { position:fixed; top:16px; left:16px; font:11px monospace; color:rgba(255,255,255,0.35); pointer-events:none; }
+#modeLbl { position:fixed; top:34px; left:16px; font:10px monospace; color:rgba(255,255,200,0.18); pointer-events:none; }
+#warn { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#300; color:#f88; padding:24px; border-radius:12px; max-width:80%; font:13px/1.6 monospace; white-space:pre-wrap; border:1px solid #f88; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="warn"></div>
+<div id="zoomLbl">1x</div>
+<div id="modeLbl">float32 · simple precision</div>
+<div id="info">1-0 fractals · Scroll zoom · Drag pan · R reset</div>
+<div id="panel">
+  <label>Fractal <select id="fracSel">
+    <option value="0">1 Mandelbrot</option>
+    <option value="1">2 Burning Ship</option>
+    <option value="2">3 Tricorn</option>
+    <option value="3">4 Cubic</option>
+    <option value="4">5 Quartic</option>
+    <option value="5">6 Buffalo</option>
+    <option value="6">7 Celtic</option>
+    <option value="7">8 Perpendicular</option>
+    <option value="8">9 Cubicorn</option>
+    <option value="9">0 Quintic</option>
+  </select></label>
+  <label>Iter <input type="range" id="iterS" min="16" max="1024" value="256" step="8"></label>
+  <label>Speed <input type="range" id="spdS" min="0" max="10" value="3" step="0.5"></label>
+  <button id="jumpD">Demo 1Kx</button>
+  <button id="jumpU">Demo 100Kx</button>
+  <a href="index.html">back</a>
+</div>
+<script>
+function warn(m){var e=document.getElementById('warn');e.textContent=m;e.style.display='block';}
+
+var c=document.getElementById('c');
+var gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+if(!gl){warn('WebGL not supported');throw 0;}
+
+function rs(){
+  var d=devicePixelRatio||1,w=innerWidth,h=innerHeight;
+  c.width=w*d;c.height=h*d;
+  c.style.width=w+'px';c.style.height=h+'px';
+  gl.viewport(0,0,c.width,c.height);
+}
+addEventListener('resize',rs);rs();
+
+var vs='attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}';
+var fs='precision highp float;'+
+'uniform vec2 R,C,D;uniform float Z,T;uniform int I,F;'+
+'vec3 pal(float t){'+
+'  vec3 a=vec3(.5),b=vec3(.5),c=vec3(1),d=vec3(.3,.2,.15);'+
+'  return a+b*cos(6.28318*(c*t+d+T*.5));'+
+'}'+
+'void main(){'+
+'  vec2 u=(gl_FragCoord.xy-.5*R)/min(R.x,R.y);'+
+'  vec2 q=C+(D+u*Z);vec2 z=vec2(0);int k=0;'+
+'  for(int i=0;i<1024;i++){'+
+'    if(i>=I)break;'+
+'    float a=z.x,b=z.y,x,y;'+
+'    if(F==3){'+
+'      float a2=a*a,b2=b*b;'+
+'      x=a*a2-3.*a*b2;y=3.*a2*b-b*b2;'+
+'    }else if(F==4){'+
+'      float a2=a*a,b2=b*b;'+
+'      x=a2*a2-6.*a2*b2+b2*b2;y=4.*a2*a*b-4.*a*b2*b;'+
+'    }else if(F==9){'+
+'      float a2=a*a,b2=b*b;'+
+'      x=a2*a2*a-10.*a2*a*b2+5.*a*b2*b2;'+
+'      y=5.*a2*a2*b-10.*a2*b2*b+b2*b2*b;'+
+'    }else{'+
+'      x=a*a-b*b;y=2.*a*b;'+
+'      if(F==1){x=abs(x);y=abs(y);}'+
+'      else if(F==2)y=-y;'+
+'      else if(F==5){x=abs(x);}'+
+'      else if(F==6){y=abs(y);}'+
+'      else if(F==7){float aa=abs(a);x=aa*aa-b*b;y=2.*aa*b;}'+
+'      else if(F==8){float a2=a*a,b2=b*b;'+
+'        x=a*a2-3.*a*b2;y=-(3.*a2*b-b*b2);'+
+'      }'+
+'    }'+
+'    z=vec2(x,y)+q;'+
+'    if(dot(z,z)>4.)break;'+
+'    k=i+1;'+
+'  }'+
+'  float t=float(k)-log2(log2(max(dot(z,z),1.)));'+
+'  t/=float(I);'+
+'  gl_FragColor=k==I?vec4(0,0,0,1):vec4(pal(t),1);'+
+'}';
+
+function mk(s,t){
+  var a=gl.createShader(t);
+  gl.shaderSource(a,s);gl.compileShader(a);
+  if(!gl.getShaderParameter(a,gl.COMPILE_STATUS)){var l=gl.getShaderInfoLog(a);gl.deleteShader(a);throw l;}
+  return a;
+}
+var pg;
+try{
+  pg=gl.createProgram();
+  gl.attachShader(pg,mk(vs,gl.VERTEX_SHADER));
+  gl.attachShader(pg,mk(fs,gl.FRAGMENT_SHADER));
+  gl.linkProgram(pg);
+  if(!gl.getProgramParameter(pg,gl.LINK_STATUS))throw gl.getProgramInfoLog(pg);
+  gl.useProgram(pg);
+}catch(e){warn('Shader error:\n'+e);throw e;}
+
+var b=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,b);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+var aP=gl.getAttribLocation(pg,'p');
+gl.enableVertexAttribArray(aP);
+gl.vertexAttribPointer(aP,2,gl.FLOAT,false,0,0);
+
+var uR=gl.getUniformLocation(pg,'R'),uC=gl.getUniformLocation(pg,'C'),
+    uD=gl.getUniformLocation(pg,'D'),
+    uZ=gl.getUniformLocation(pg,'Z'),uT=gl.getUniformLocation(pg,'T'),
+    uI=gl.getUniformLocation(pg,'I'),uF=gl.getUniformLocation(pg,'F');
+
+function splitV(v){var h=Math.fround(v);return{h:h,lo:v-h};}
+
+var cx=-.5,cy=0,zoom=3,mi=256,fr=0,sp=.5;
+var drg=false,lx=0,ly=0;
+
+var names=['Mandelbrot','Burning Ship','Tricorn','Cubic','Quartic','Buffalo','Celtic','Perpendicular','Cubicorn','Quintic'];
+var jumps=[[-.5,0,3],[-.4,-.6,3],[-.5,0,3],[0,0,3],[0,0,3],[-.5,0,3],[-.5,0,3],[-.5,0,3],[0,0,3],[0,0,3]];
+
+function setF(v){
+  fr=v;document.getElementById('fracSel').value=v;
+  document.getElementById('modeLbl').textContent=names[v]+' · float32';
+}
+function zlbl(){
+  var mag=3/zoom;
+  document.getElementById('zoomLbl').textContent=mag<1e6?mag.toFixed(1)+'x':mag.toExponential(1)+'x';
+}
+function jmp(x,y,z){cx=x;cy=y;zoom=z;zlbl();}
+
+c.onmousedown=function(e){drg=true;lx=e.clientX;ly=e.clientY;};
+addEventListener('mouseup',function(){drg=false;});
+addEventListener('mousemove',function(e){
+  if(!drg)return;
+  var s=zoom/Math.min(innerWidth,innerHeight);
+  cx-=(e.clientX-lx)*s;cy+=(e.clientY-ly)*s;
+  lx=e.clientX;ly=e.clientY;
+});
+c.onwheel=function(e){
+  e.preventDefault();
+  var f=e.deltaY>0?1.15:.85;
+  var r=c.getBoundingClientRect();
+  var mx=(e.clientX-r.left)/r.width,my=1-(e.clientY-r.top)/r.height;
+  var sx=innerWidth/Math.min(innerWidth,innerHeight);
+  var sy=innerHeight/Math.min(innerWidth,innerHeight);
+  cx+=(mx-.5)*sx*zoom*(1-f);cy+=(my-.5)*sy*zoom*(1-f);
+  zoom*=f;zlbl();
+};
+c.oncontextmenu=function(e){e.preventDefault();};
+
+addEventListener('keydown',function(e){
+  if(e.key==='r'||e.key==='R'){jmp(-.5,0,3);setF(0);}
+  if(e.key==='1')setF(0);if(e.key==='2')setF(1);if(e.key==='3')setF(2);
+  if(e.key==='4')setF(3);if(e.key==='5')setF(4);if(e.key==='6')setF(5);
+  if(e.key==='7')setF(6);if(e.key==='8')setF(7);if(e.key==='9')setF(8);
+  if(e.key==='0')setF(9);
+});
+
+document.getElementById('fracSel').onchange=function(){setF(parseInt(this.value));};
+document.getElementById('iterS').oninput=function(){mi=parseInt(this.value);};
+document.getElementById('spdS').oninput=function(){sp=parseInt(this.value)*.1;};
+document.getElementById('jumpD').onclick=function(){jmp(jumps[fr][0],jumps[fr][1],jumps[fr][2]);};
+document.getElementById('jumpU').onclick=function(){jmp(jumps[fr][0],jumps[fr][1],jumps[fr][2]/100);};
+
+function rdr(t){
+  var sx=splitV(cx),sy=splitV(cy),sz=splitV(zoom);
+  gl.uniform2f(uR,c.width,c.height);
+  gl.uniform2f(uC,sx.h,sy.h);
+  gl.uniform2f(uD,cx-sx.h,cy-sy.h);
+  gl.uniform1f(uZ,zoom);
+  gl.uniform1f(uT,t/1000*sp);
+  gl.uniform1i(uI,mi);
+  gl.uniform1i(uF,fr);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  requestAnimationFrame(rdr);
+}
+requestAnimationFrame(rdr);
+</script>
+</body>
+</html>

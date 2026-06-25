@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>storm</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#050508;font-family:monospace}
+canvas{display:block;position:fixed;top:0;left:0;width:100%;height:100%}
+#hud{
+  position:fixed;bottom:25px;left:50%;transform:translateX(-50%);
+  color:rgba(255,255,255,0.1);font-size:10px;z-index:10;pointer-events:none;letter-spacing:1px
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">◈ storm</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+let W,H;
+function resize(){W=innerWidth;H=innerHeight;c.width=W;c.height=H}
+resize();addEventListener('resize',resize);
+
+const RAIN_COUNT=Math.min(500,Math.floor(W*H/2500));
+const rain=new Float32Array(RAIN_COUNT*4);
+for(let i=0;i<RAIN_COUNT*4;i+=4){
+  rain[i]=Math.random()*W;rain[i+1]=Math.random()*H;
+  rain[i+2]=8+Math.random()*18;rain[i+3]=3+Math.random()*6;
+}
+let flash=0,branches=[],ltimer=0,wind=0,intensity=0.5;
+
+// Pre-compute jitter offsets for rain (avoids per-frame Math.random)
+const jitter=new Float32Array(RAIN_COUNT);
+for(let i=0;i<RAIN_COUNT;i++)jitter[i]=Math.random()*0.12+0.04;
+
+// Splash particles
+const splashes=[];
+
+// Thunder audio context
+let audioCtx,osc,gain;
+function initThunder(){
+  try{
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    osc=audioCtx.createOscillator();
+    gain=audioCtx.createGain();
+    osc.type='sawtooth';osc.frequency.value=60;
+    gain.gain.value=0;
+    osc.connect(gain);gain.connect(audioCtx.destination);
+    osc.start();
+  }catch(e){}
+}
+initThunder();
+
+function strike(){
+  const sx=Math.random()*W;
+  const pts=[];let idx=0;
+  function add(x,y,ox,oy,depth){pts[idx++]=x;pts[idx++]=y;pts[idx++]=ox;pts[idx++]=oy;pts[idx++]=depth}
+  function branch(x,y,angle,depth){
+    if(depth>8||idx>800)return;
+    const segs=2+~~(Math.random()*4);
+    let cx=x,cy=y;
+    for(let i=0;i<segs;i++){
+      const na=angle+(Math.random()-0.5)*0.7*(1-depth*0.09);
+      const dist=10+Math.random()*25*(1-depth/12);
+      cx+=Math.cos(na)*dist;cy+=Math.sin(na)*dist;
+      if(cx<0||cx>W||cy>H)break;
+      add(cx,cy,cx,cy,depth+Math.random()*0.5);
+      if(Math.random()<0.3*(1-depth/10)&&depth<5)branch(cx,cy,na+(Math.random()-0.5)*Math.PI*0.5,depth+1);
+    }
+  }
+  add(sx,0,sx,0,0);
+  const windA=-Math.PI/2+wind*0.5+(Math.random()-0.5)*0.5;
+  branch(sx,0,windA,0);
+  branches=pts;
+  flash=1+intensity*0.8;
+  if(gain){
+    gain.gain.setValueAtTime(0.15+intensity*0.25,audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.3+intensity*0.4);
+    osc.frequency.setValueAtTime(40+Math.random()*30,audioCtx.currentTime);
+  }
+}
+
+// Clouds
+const clouds=[];
+for(let i=0;i<6;i++){
+  clouds.push({
+    x:-Math.random()*W*0.5,y:Math.random()*H*0.4,s:60+Math.random()*120,
+    sp:0.2+Math.random()*0.4,o:0.03+Math.random()*0.06
+  });
+}
+
+function loop(t){
+  const dt=0.016;
+  ctx.fillStyle='rgba(5,5,8,0.25)';ctx.fillRect(0,0,W,H);
+
+  // Storm intensity cycles
+  intensity=0.3+0.7*(0.5+0.5*Math.sin(t*0.00008))*Math.max(0,Math.sin(t*0.00015));
+
+  ltimer-=dt*(0.3+intensity*1.5+Math.random()*0.5*intensity);
+  if(ltimer<=0){ltimer=(1+Math.random()*3)*(1-intensity*0.6);strike()}
+  wind+=Math.sin(t*0.00025)*0.0005*intensity;
+
+  // Clouds
+  for(const cl of clouds){
+    cl.x+=cl.sp*(0.5+intensity*0.5);
+    if(cl.x>W+cl.s){cl.x=-cl.s;cl.y=Math.random()*H*0.3}
+    ctx.fillStyle=`rgba(100,120,140,${cl.o*intensity})`;
+    ctx.shadowColor=`rgba(100,120,140,${cl.o*intensity*0.3})`;
+    ctx.shadowBlur=20;
+    ctx.beginPath();ctx.ellipse(cl.x,cl.y,cl.s,cl.s*0.2,0,0,6.28);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cl.x-cl.s*0.3,cl.y+cl.s*0.1,cl.s*0.6,cl.s*0.15,0,0,6.28);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cl.x+cl.s*0.25,cl.y-cl.s*0.05,cl.s*0.5,cl.s*0.12,0,0,6.28);ctx.fill();
+  }
+  ctx.shadowBlur=0;
+
+  // Batched rain path
+  const windEff=wind*(0.5+intensity*0.5);
+  ctx.shadowBlur=0;
+  ctx.strokeStyle=`rgba(120,170,230,${0.08+intensity*0.15})`;
+  ctx.lineWidth=0.8;
+  ctx.beginPath();
+  for(let i=0;i<RAIN_COUNT*4;i+=4){
+    const r=rain[i],y=rain[i+1],l=rain[i+2],sp=rain[i+3];
+    const x=r+windEff*(y*0.01);
+    ctx.moveTo(x,y);ctx.lineTo(x-windEff*3-l*0.15,y-l);
+    rain[i+1]=y+sp*(0.5+intensity*0.8);
+    if(rain[i+1]>H){
+      rain[i+1]=-l;rain[i]=Math.random()*W;
+      rain[i+2]=8+Math.random()*18;
+      // splash
+      for(let s=0;s<2;s++){
+        splashes.push({x:x,ax:x,vy:-1-Math.random()*2-intensity*2,
+          l:2+Math.random()*3,o:0.4+intensity*0.3});
+      }
+    }
+  }
+  ctx.stroke();
+
+  // Splashes
+  ctx.shadowBlur=0;
+  for(let i=splashes.length-1;i>=0;i--){
+    const s=splashes[i];
+    s.x+=Math.sin(s.vy*5)*0.3;s.vy+=0.08;s.y+=s.vy;s.o-=0.015;
+    if(s.o<=0){splashes.splice(i,1);continue}
+    ctx.fillStyle=`rgba(150,200,240,${s.o*0.3})`;
+    ctx.beginPath();ctx.arc(s.x,s.y,s.l*s.o,0,6.28);ctx.fill();
+  }
+
+  // Lightning
+  if(flash>0.01){
+    flash*=0.92-intensity*0.03;
+    const fa=flash*intensity;
+    ctx.shadowColor=`rgba(100,180,255,${fa*0.25})`;
+    ctx.shadowBlur=35;ctx.strokeStyle=`rgba(150,210,255,${fa*0.4})`;
+    ctx.lineWidth=1.5+fa*3;
+    for(let i=5;i<branches.length;i+=5){
+      const p=branches;
+      ctx.beginPath();ctx.moveTo(p[i],p[i+1]);ctx.lineTo(p[i+2],p[i+3]);ctx.stroke();
+    }
+    ctx.shadowBlur=50;ctx.shadowColor=`rgba(200,240,255,${fa*0.3})`;
+    ctx.strokeStyle=`rgba(255,255,255,${fa*0.5})`;ctx.lineWidth=0.5+fa*1.5;
+    for(let i=5;i<Math.min(branches.length,20);i+=5){
+      ctx.beginPath();ctx.moveTo(branches[i],branches[i+1]);ctx.lineTo(branches[i+2],branches[i+3]);ctx.stroke();
+    }
+    ctx.shadowBlur=0;
+    ctx.fillStyle=`rgba(180,220,255,${fa*0.05})`;
+    ctx.fillRect(0,0,W,H);
+  }
+  ctx.shadowBlur=0;
+
+  // Fog at bottom
+  const fg=ctx.createLinearGradient(0,H-80,0,H);
+  fg.addColorStop(0,'rgba(100,120,140,0)');
+  fg.addColorStop(1,`rgba(100,120,140,${0.1+intensity*0.15})`);
+  ctx.fillStyle=fg;ctx.fillRect(0,H-80,W,80);
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
