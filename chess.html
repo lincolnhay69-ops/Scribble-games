@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Chess - Scribble</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-background: #fdfbf7;
+      --color-foreground: #2d2d2d;
+      --color-muted: #e5e0d8;
+      --color-border: #2d2d2d;
+      --color-secondary: #2d5da1;
+      --color-sticky: #fff9c4;
+      --color-shadow: #2d2d2d;
+      --font-heading: 'Kalam', cursive;
+      --font-body: 'Patrick Hand', cursive;
+      --square-light: #f0d9b5;
+      --square-dark: #b58863;
+    }
+    body.dark {
+      --color-background: #121212;
+      --color-foreground: #ffffff;
+      --color-muted: #2a2a2a;
+      --color-border: #333;
+      --color-shadow: transparent;
+      --square-light: #769656;
+      --square-dark: #4e7536;
+      background-image: radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--font-body);
+      background: var(--color-background);
+      background-image: radial-gradient(var(--color-muted) 1px, transparent 1px);
+      background-size: 24px 24px;
+      color: var(--color-foreground);
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 2px dashed var(--color-border);
+      background: var(--color-background);
+    }
+    .header h1 {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .window-btn {
+      background: none;
+      border: 2px solid var(--color-border);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      color: var(--color-foreground);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+    }
+    .window-btn:hover {
+      background: var(--color-muted);
+      box-shadow: 2px 2px 0 0 var(--color-shadow);
+    }
+    .back-btn {
+      background: none;
+      border: 2px solid var(--color-border);
+      cursor: pointer;
+      padding: 4px 12px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: var(--color-foreground);
+    }
+    .back-btn:hover {
+      background: var(--color-muted);
+      box-shadow: 2px 2px 0 var(--color-shadow);
+    }
+    .screen {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .screen.active { display: flex; }
+    .mode-select {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      max-width: 400px;
+      width: 100%;
+    }
+    .mode-select h2 {
+      font-family: var(--font-heading);
+      font-size: 1.6rem;
+      text-align: center;
+    }
+    .mode-select p { font-size: 1rem; opacity: 0.7; text-align: center; }
+    .mode-cards {
+      display: flex;
+      gap: 16px;
+      width: 100%;
+    }
+    .mode-card {
+      flex: 1;
+      aspect-ratio: 1 / 1;
+      border: 2px solid var(--color-border);
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      gap: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+    .mode-card:hover {
+      transform: scale(1.05);
+      box-shadow: 3px 3px 0 var(--color-shadow);
+    }
+    .mode-card-local { background: #c8e6c9; }
+    .mode-card svg { width: 48px; height: 48px; }
+    .mode-card span {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .board-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      flex: 1;
+      justify-content: center;
+    }
+    .status-bar {
+      font-family: var(--font-heading);
+      font-size: 1.1rem;
+      text-align: center;
+      min-height: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .board-container {
+      position: relative;
+      max-width: min(80vh, 500px);
+      width: 100%;
+      aspect-ratio: 1 / 1;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      width: 100%;
+      height: 100%;
+      border: 3px solid var(--color-border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .square {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: min(7vw, 2.8rem);
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+    }
+    .square.light { background: var(--square-light); }
+    .square.dark { background: var(--square-dark); }
+    .square.selected { background: #7fc97f !important; }
+    .square.valid-move::after {
+      content: '';
+      position: absolute;
+      width: 30%;
+      height: 30%;
+      background: radial-gradient(circle, rgba(0,0,0,0.3) 0%, transparent 70%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .square.valid-capture {
+      box-shadow: inset 0 0 0 3px rgba(0,0,0,0.4);
+    }
+    .square.last-move {
+      background: rgba(255,255,0,0.35) !important;
+    }
+    .square.check {
+      background: radial-gradient(circle, #ff4444 0%, #ff4444 40%, transparent 50%) !important;
+    }
+    .captured-area {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 1.2rem;
+      min-height: 1.8rem;
+      flex-wrap: wrap;
+    }
+    .captured-area .label {
+      font-family: var(--font-heading);
+      font-size: 0.8rem;
+      opacity: 0.5;
+      margin-right: 4px;
+    }
+    .board-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .primary-btn {
+      background: var(--color-secondary);
+      border: 2px solid var(--color-border);
+      color: #fff;
+      cursor: pointer;
+      padding: 6px 18px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .primary-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 3px 3px 0 var(--color-shadow);
+    }
+    .secondary-btn {
+      background: var(--color-muted);
+      border: 2px solid var(--color-border);
+      cursor: pointer;
+      padding: 6px 18px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      color: var(--color-foreground);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .secondary-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 3px 3px 0 var(--color-shadow);
+    }
+    .win-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .win-overlay.active { display: flex; }
+    .win-card {
+      background: var(--color-background);
+      border: 2px solid var(--color-border);
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      padding: 32px 40px;
+      text-align: center;
+      max-width: 360px;
+      width: 90%;
+      box-shadow: 6px 6px 0 var(--color-shadow);
+    }
+    .win-card h2 {
+      font-family: var(--font-heading);
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+    }
+    .win-card p { font-size: 1.1rem; margin-bottom: 4px; }
+    .win-card .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .promotion-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 101;
+    }
+    .promotion-modal.active { display: flex; }
+    .promotion-choices {
+      background: var(--color-background);
+      border: 2px solid var(--color-border);
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      padding: 20px;
+      display: flex;
+      gap: 12px;
+      box-shadow: 6px 6px 0 var(--color-shadow);
+    }
+    .promotion-btn {
+      width: 56px;
+      height: 56px;
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-background);
+      cursor: pointer;
+      font-size: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s;
+    }
+    .promotion-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 2px 2px 0 var(--color-shadow);
+    }
+    @media (max-width: 500px) {
+      .square { font-size: min(12vw, 2.2rem); }
+      .board-container { max-width: 95vw; }
+      .win-card { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>♟ Chess</h1>
+  <div class="header-right">
+    <button class="back-btn" id="header-back-btn" style="display:none;" onclick="goHome()">← Back</button>
+    <button class="window-btn" id="dark-toggle" title="Toggle dark mode" onclick="document.body.classList.toggle('dark')">
+      <svg viewBox="0 0 16 16" width="14" height="14">
+        <path d="M 9 2 C 5.5 2 3 5 3 8.5 C 3 12 5.5 14.5 9 14.5 C 10.5 14.5 12 13.5 13 12 C 10 12.5 6.5 11 6.5 8 C 6.5 5.5 8 3.5 10.5 3 C 10 2.5 9.5 2 9 2 Z" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- Mode Select -->
+<div class="screen active" id="screen-diff">
+  <div class="mode-select">
+    <h2>Play Chess</h2>
+    <p>Local hot-seat — two players, one device</p>
+    <div class="mode-cards">
+      <div class="mode-card mode-card-local" onclick="startGame()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="6" width="20" height="12" rx="2"/>
+          <circle cx="8" cy="12" r="1.5"/>
+          <circle cx="16" cy="12" r="1.5"/>
+        </svg>
+        <span>Local<br>Hot-Seat</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Game Board -->
+<div class="screen" id="screen-board">
+  <div class="board-wrap">
+    <div class="status-bar" id="status-bar">
+      <span id="status-text">White's turn</span>
+    </div>
+    <div class="captured-area" id="captured-black" style="justify-content:flex-start;">
+      <span class="label">Captured:</span>
+    </div>
+    <div class="board-container">
+      <div class="board" id="board"></div>
+    </div>
+    <div class="captured-area" id="captured-white" style="justify-content:flex-start;">
+      <span class="label">Captured:</span>
+    </div>
+    <div class="board-controls">
+      <button class="secondary-btn" onclick="goHome()">← Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Win Overlay -->
+<div class="win-overlay" id="win-overlay">
+  <div class="win-card">
+    <h2 id="win-title">Game Over</h2>
+    <p id="win-desc"></p>
+    <div class="btn-row">
+      <button class="primary-btn" onclick="closeWin()">Play Again</button>
+      <button class="secondary-btn" onclick="goHome()">Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Promotion Modal -->
+<div class="promotion-modal" id="promotion-modal">
+  <div class="promotion-choices" id="promotion-choices"></div>
+</div>
+
+<script>
+// ---- Chess Game ----
+var board = [];
+var turn = 'w';
+var selected = null;
+var validMoves = [];
+var gameOver = false;
+var castlingRights = {};
+var enPassantTarget = null;
+var capturedWhite = [];
+var capturedBlack = [];
+var lastMove = null;
+var inCheck = false;
+var moveCount = 0;
+
+var PIECES = {
+  w: { K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙' },
+  b: { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟' }
+};
+
+function initBoard() {
+  board = [
+    [{type:'R',color:'b'},{type:'N',color:'b'},{type:'B',color:'b'},{type:'Q',color:'b'},{type:'K',color:'b'},{type:'B',color:'b'},{type:'N',color:'b'},{type:'R',color:'b'}],
+    [{type:'P',color:'b'},{type:'P',color:'b'},{type:'P',color:'b'},{type:'P',color:'b'},{type:'P',color:'b'},{type:'P',color:'b'},{type:'P',color:'b'},{type:'P',color:'b'}],
+    [null,null,null,null,null,null,null,null],
+    [null,null,null,null,null,null,null,null],
+    [null,null,null,null,null,null,null,null],
+    [null,null,null,null,null,null,null,null],
+    [{type:'P',color:'w'},{type:'P',color:'w'},{type:'P',color:'w'},{type:'P',color:'w'},{type:'P',color:'w'},{type:'P',color:'w'},{type:'P',color:'w'},{type:'P',color:'w'}],
+    [{type:'R',color:'w'},{type:'N',color:'w'},{type:'B',color:'w'},{type:'Q',color:'w'},{type:'K',color:'w'},{type:'B',color:'w'},{type:'N',color:'w'},{type:'R',color:'w'}]
+  ];
+  turn = 'w';
+  selected = null;
+  validMoves = [];
+  gameOver = false;
+  castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
+  enPassantTarget = null;
+  capturedWhite = [];
+  capturedBlack = [];
+  lastMove = null;
+  inCheck = false;
+  moveCount = 0;
+}
+
+function getPiece(r, c) {
+  if (r < 0 || r > 7 || c < 0 || c > 7) return null;
+  return board[r][c];
+}
+
+function findKing(color) {
+  for (var r = 0; r < 8; r++)
+    for (var c = 0; c < 8; c++) {
+      var p = board[r][c];
+      if (p && p.type === 'K' && p.color === color) return { row: r, col: c };
+    }
+  return null;
+}
+
+function isAttackedBy(row, col, byColor) {
+  for (var r = 0; r < 8; r++)
+    for (var c = 0; c < 8; c++) {
+      var p = board[r][c];
+      if (!p || p.color !== byColor) continue;
+      var moves = getPseudoMoves(r, c, true);
+      for (var i = 0; i < moves.length; i++)
+        if (moves[i].row === row && moves[i].col === col) return true;
+    }
+  return false;
+}
+
+function isInCheck(color) {
+  var king = findKing(color);
+  if (!king) return false;
+  var enemy = color === 'w' ? 'b' : 'w';
+  return isAttackedBy(king.row, king.col, enemy);
+}
+
+function getPseudoMoves(row, col, attackOnly) {
+  var piece = board[row][col];
+  if (!piece) return [];
+  var moves = [];
+  var r, c, dr, dc, i;
+
+  switch (piece.type) {
+    case 'P': {
+      var dir = piece.color === 'w' ? -1 : 1;
+      var startRow = piece.color === 'w' ? 6 : 1;
+      // Forward
+      if (!attackOnly) {
+        if (!getPiece(row + dir, col)) {
+          moves.push({ row: row + dir, col: col });
+          if (row === startRow && !getPiece(row + 2 * dir, col))
+            moves.push({ row: row + 2 * dir, col: col });
+        }
+      }
+      // Captures
+      for (var dc of [-1, 1]) {
+        var tr = row + dir, tc = col + dc;
+        if (tr < 0 || tr > 7 || tc < 0 || tc > 7) continue;
+        var target = getPiece(tr, tc);
+        if (attackOnly) { moves.push({ row: tr, col: tc }); }
+        else if (target && target.color !== piece.color) { moves.push({ row: tr, col: tc }); }
+        // En passant
+        if (!attackOnly && enPassantTarget && enPassantTarget.row === tr && enPassantTarget.col === tc)
+          moves.push({ row: tr, col: tc, ep: true });
+      }
+      break;
+    }
+    case 'N': {
+      var jumps = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+      for (i = 0; i < jumps.length; i++) {
+        r = row + jumps[i][0]; c = col + jumps[i][1];
+        if (r < 0 || r > 7 || c < 0 || c > 7) continue;
+        var t = getPiece(r, c);
+        if (!attackOnly && t && t.color === piece.color) continue;
+        moves.push({ row: r, col: c });
+      }
+      break;
+    }
+    case 'B': {
+      var dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+      for (i = 0; i < dirs.length; i++) {
+        dr = dirs[i][0]; dc = dirs[i][1]; r = row + dr; c = col + dc;
+        while (r >= 0 && r <= 7 && c >= 0 && c <= 7) {
+          var t = getPiece(r, c);
+          if (t) {
+            if (t.color !== piece.color || attackOnly) moves.push({ row: r, col: c });
+            break;
+          }
+          moves.push({ row: r, col: c });
+          r += dr; c += dc;
+        }
+      }
+      break;
+    }
+    case 'R': {
+      var dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+      for (i = 0; i < dirs.length; i++) {
+        dr = dirs[i][0]; dc = dirs[i][1]; r = row + dr; c = col + dc;
+        while (r >= 0 && r <= 7 && c >= 0 && c <= 7) {
+          var t = getPiece(r, c);
+          if (t) {
+            if (t.color !== piece.color || attackOnly) moves.push({ row: r, col: c });
+            break;
+          }
+          moves.push({ row: r, col: c });
+          r += dr; c += dc;
+        }
+      }
+      break;
+    }
+    case 'Q': {
+      var dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+      for (i = 0; i < dirs.length; i++) {
+        dr = dirs[i][0]; dc = dirs[i][1]; r = row + dr; c = col + dc;
+        while (r >= 0 && r <= 7 && c >= 0 && c <= 7) {
+          var t = getPiece(r, c);
+          if (t) {
+            if (t.color !== piece.color || attackOnly) moves.push({ row: r, col: c });
+            break;
+          }
+          moves.push({ row: r, col: c });
+          r += dr; c += dc;
+        }
+      }
+      break;
+    }
+    case 'K': {
+      var dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+      for (i = 0; i < dirs.length; i++) {
+        r = row + dirs[i][0]; c = col + dirs[i][1];
+        if (r < 0 || r > 7 || c < 0 || c > 7) continue;
+        var t = getPiece(r, c);
+        if (!attackOnly && t && t.color === piece.color) continue;
+        moves.push({ row: r, col: c });
+      }
+      // Castling
+      if (!attackOnly && !isInCheck(piece.color)) {
+        var kSide = piece.color === 'w' ? 'wK' : 'bK';
+        var qSide = piece.color === 'w' ? 'wQ' : 'bQ';
+        var backRank = piece.color === 'w' ? 7 : 0;
+        // King-side
+        if (castlingRights[kSide] && !getPiece(backRank, 5) && !getPiece(backRank, 6)) {
+          if (!isAttackedBy(backRank, 5, piece.color === 'w' ? 'b' : 'w') &&
+              !isAttackedBy(backRank, 6, piece.color === 'w' ? 'b' : 'w'))
+            moves.push({ row: backRank, col: 6, castle: 'K' });
+        }
+        // Queen-side
+        if (castlingRights[qSide] && !getPiece(backRank, 3) && !getPiece(backRank, 2) && !getPiece(backRank, 1)) {
+          if (!isAttackedBy(backRank, 3, piece.color === 'w' ? 'b' : 'w') &&
+              !isAttackedBy(backRank, 2, piece.color === 'w' ? 'b' : 'w'))
+            moves.push({ row: backRank, col: 2, castle: 'Q' });
+        }
+      }
+      break;
+    }
+  }
+  return moves;
+}
+
+function makeSimulatedMove(fromR, fromC, toR, toC) {
+  var captured = board[toR][toC];
+  board[toR][toC] = board[fromR][fromC];
+  board[fromR][fromC] = null;
+  return captured;
+}
+
+function getValidMoves(row, col) {
+  var piece = board[row][col];
+  if (!piece) return [];
+  var pseudo = getPseudoMoves(row, col);
+  var valid = [];
+  for (var i = 0; i < pseudo.length; i++) {
+    var m = pseudo[i];
+    var simulated = makeSimulatedMove(row, col, m.row, m.col);
+    if (m.ep) board[row][m.col] = null;
+    if (!isInCheck(piece.color)) valid.push(m);
+    board[row][col] = board[m.row][m.col];
+    board[m.row][m.col] = simulated;
+    if (m.ep) board[row][m.col] = { type: 'P', color: piece.color === 'w' ? 'b' : 'w' };
+  }
+  return valid;
+}
+
+function hasAnyValidMoves(color) {
+  for (var r = 0; r < 8; r++)
+    for (var c = 0; c < 8; c++) {
+      var p = board[r][c];
+      if (p && p.color === color && getValidMoves(r, c).length > 0) return true;
+    }
+  return false;
+}
+
+// ---- Rendering ----
+function renderBoard() {
+  var el = document.getElementById('board');
+  el.innerHTML = '';
+  for (var r = 0; r < 8; r++)
+    for (var c = 0; c < 8; c++) {
+      var sq = document.createElement('div');
+      sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+      sq.dataset.row = r;
+      sq.dataset.col = c;
+
+      var piece = board[r][c];
+      if (piece) sq.textContent = PIECES[piece.color][piece.type];
+
+      if (selected && selected.row === r && selected.col === c) sq.classList.add('selected');
+      if (lastMove) {
+        if ((lastMove.fromR === r && lastMove.fromC === c) || (lastMove.toR === r && lastMove.toC === c))
+          sq.classList.add('last-move');
+      }
+
+      // Valid move indicators
+      for (var i = 0; i < validMoves.length; i++) {
+        if (validMoves[i].row === r && validMoves[i].col === c) {
+          if (piece) sq.classList.add('valid-capture');
+          else sq.classList.add('valid-move');
+          break;
+        }
+      }
+
+      // Check indicator
+      if (piece && piece.type === 'K' && piece.color === turn && inCheck)
+        sq.classList.add('check');
+
+      sq.onclick = function() { onSquareClick(parseInt(this.dataset.row), parseInt(this.dataset.col)); };
+      el.appendChild(sq);
+    }
+  updateStatus();
+}
+
+function updateStatus() {
+  var el = document.getElementById('status-text');
+  if (gameOver) {
+    el.textContent = document.getElementById('win-title').textContent;
+    return;
+  }
+  var names = { w: 'White', b: 'Black' };
+  var text = names[turn] + "'s turn";
+  if (inCheck) text = '⚠ ' + names[turn] + ' is in check!';
+  el.textContent = text;
+  renderCaptured();
+}
+
+function renderCaptured() {
+  var order = [{arr: capturedBlack, id: 'captured-black', color: 'b'}, {arr: capturedWhite, id: 'captured-white', color: 'w'}];
+  for (var o = 0; o < order.length; o++) {
+    var el = document.getElementById(order[o].id);
+    var pieces = order[o].arr;
+    var sorted = pieces.slice().sort(function(a, b) {
+      var orderMap = { P: 0, N: 1, B: 2, R: 3, Q: 4 };
+      return (orderMap[a.type] || 0) - (orderMap[b.type] || 0);
+    });
+    el.innerHTML = '<span class="label">Captured:</span> ';
+    for (var i = 0; i < sorted.length; i++)
+      el.innerHTML += PIECES[order[o].color][sorted[i].type];
+    if (sorted.length === 0) el.innerHTML = '<span class="label">Captured:</span>';
+  }
+}
+
+// ---- Game Logic ----
+function onSquareClick(row, col) {
+  if (gameOver) return;
+  var piece = board[row][col];
+
+  // Clicked a valid move target
+  for (var i = 0; i < validMoves.length; i++) {
+    if (validMoves[i].row === row && validMoves[i].col === col) {
+      executeMove(selected.row, selected.col, row, col, validMoves[i]);
+      return;
+    }
+  }
+
+  // Clicked own piece → select
+  if (piece && piece.color === turn) {
+    selectPiece(row, col);
+    return;
+  }
+
+  // Clicked empty or enemy square (not a valid move) → deselect
+  selected = null;
+  validMoves = [];
+  renderBoard();
+}
+
+function selectPiece(row, col) {
+  selected = { row: row, col: col };
+  validMoves = getValidMoves(row, col);
+  renderBoard();
+}
+
+function executeMove(fromR, fromC, toR, toC, moveData) {
+  var piece = board[fromR][fromC];
+  var captured = board[toR][toC];
+
+  // En passant capture
+  if (moveData.ep) {
+    captured = board[fromR][toC];
+    board[fromR][toC] = null;
+  }
+
+  // Store captured
+  if (captured) {
+    if (captured.color === 'w') capturedWhite.push(captured);
+    else capturedBlack.push(captured);
+  }
+
+  // Castling - move rook
+  if (moveData.castle) {
+    var backRank = fromR;
+    if (moveData.castle === 'K') { board[backRank][5] = board[backRank][7]; board[backRank][7] = null; }
+    else { board[backRank][3] = board[backRank][0]; board[backRank][0] = null; }
+  }
+
+  // Move piece
+  board[toR][toC] = piece;
+  board[fromR][fromC] = null;
+  lastMove = { fromR: fromR, fromC: fromC, toR: toR, toC: toC };
+
+  // Update castling rights
+  if (piece.type === 'K') castlingRights[piece.color + 'K'] = castlingRights[piece.color + 'Q'] = false;
+  if (piece.type === 'R') {
+    if (fromR === 7 && fromC === 0) castlingRights.wQ = false;
+    if (fromR === 7 && fromC === 7) castlingRights.wK = false;
+    if (fromR === 0 && fromC === 0) castlingRights.bQ = false;
+    if (fromR === 0 && fromC === 7) castlingRights.bK = false;
+  }
+  if (captured && captured.type === 'R') {
+    if (toR === 7 && toC === 0) castlingRights.wQ = false;
+    if (toR === 7 && toC === 7) castlingRights.wK = false;
+    if (toR === 0 && toC === 0) castlingRights.bQ = false;
+    if (toR === 0 && toC === 7) castlingRights.bK = false;
+  }
+
+  // En passant tracking
+  enPassantTarget = null;
+  if (piece.type === 'P' && Math.abs(toR - fromR) === 2)
+    enPassantTarget = { row: (fromR + toR) / 2, col: fromC };
+
+  // Pawn promotion
+  if (piece.type === 'P' && (toR === 0 || toR === 7)) {
+    showPromotion(toR, toC, piece.color);
+    return;
+  }
+
+  finishTurn();
+}
+
+function finishTurn() {
+  turn = turn === 'w' ? 'b' : 'w';
+  moveCount++;
+  inCheck = isInCheck(turn);
+
+  if (!hasAnyValidMoves(turn)) {
+    gameOver = true;
+    if (inCheck) {
+      var winner = turn === 'w' ? 'Black' : 'White';
+      document.getElementById('win-title').textContent = '♚ Checkmate!';
+      document.getElementById('win-desc').textContent = winner + ' wins!';
+    } else {
+      document.getElementById('win-title').textContent = '🤝 Stalemate';
+      document.getElementById('win-desc').textContent = 'The game is a draw.';
+    }
+    document.getElementById('win-overlay').classList.add('active');
+  }
+
+  selected = null;
+  validMoves = [];
+  renderBoard();
+}
+
+// ---- Promotion ----
+var _promoCallback = null;
+
+function showPromotion(row, col, color) {
+  var modal = document.getElementById('promotion-modal');
+  var choices = document.getElementById('promotion-choices');
+  choices.innerHTML = '';
+  var types = ['Q', 'R', 'B', 'N'];
+  for (var i = 0; i < types.length; i++) {
+    var btn = document.createElement('button');
+    btn.className = 'promotion-btn';
+    btn.textContent = PIECES[color][types[i]];
+    btn.onclick = function(type) {
+      return function() {
+        board[row][col].type = type;
+        modal.classList.remove('active');
+        finishTurn();
+      };
+    }(types[i]);
+    choices.appendChild(btn);
+  }
+  modal.classList.add('active');
+}
+
+// ---- Game Flow ----
+function startGame() {
+  initBoard();
+  document.getElementById('win-overlay').classList.remove('active');
+  document.getElementById('promotion-modal').classList.remove('active');
+  showScreen('screen-board');
+  renderBoard();
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  document.getElementById('header-back-btn').style.display = (id !== 'screen-diff') ? 'inline-block' : 'none';
+}
+
+function goHome() {
+  document.getElementById('win-overlay').classList.remove('active');
+  document.getElementById('promotion-modal').classList.remove('active');
+  showScreen('screen-diff');
+}
+
+function closeWin() {
+  document.getElementById('win-overlay').classList.remove('active');
+  startGame();
+}
+</script>
+</body>
+</html>
