@@ -263,6 +263,42 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+    .lb-wrap {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--color-border);
+      max-height: 180px;
+      overflow-y: auto;
+      text-align: left;
+      width: 100%;
+    }
+    .lb-wrap h3 {
+      font-family: var(--font-heading);
+      font-size: 0.85rem;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .lb-wrap ol {
+      list-style: none;
+      padding: 0;
+      font-size: 0.8rem;
+    }
+    .lb-wrap li {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .lb-wrap li.me {
+      background: rgba(0,0,0,0.06);
+      font-weight: 700;
+    }
+    .lb-wrap .lb-empty {
+      text-align: center;
+      opacity: 0.5;
+      font-size: 0.8rem;
+      padding: 8px 0;
+    }
     .primary-btn {
       background: var(--color-secondary);
       border: 2px solid var(--color-border);
@@ -356,6 +392,10 @@
     <div class="score-big" id="result-score">0</div>
     <p class="detail" id="result-detail">out of 10 correct</p>
     <p class="detail" id="result-pct"></p>
+    <div class="lb-wrap">
+      <h3>🏆 Leaderboard</h3>
+      <div id="lb-content" class="lb-empty">Loading...</div>
+    </div>
     <div class="btn-row">
       <button class="primary-btn" onclick="playAgain()">Play Again</button>
       <button class="secondary-btn" onclick="goHome()">Categories</button>
@@ -364,6 +404,9 @@
 </div>
 
 <script>
+var DB_SECRET = 'VkAJSSFjEpCFAeDr6Sy1pDoAoBmxgOInoUoLUGc9';
+var DB_BASE = 'https://telegram-a007d-default-rtdb.firebaseio.com';
+
 var QUESTIONS = {
   science: [
     { q: 'What is the chemical symbol for gold?', a: ['Au', 'Ag', 'Fe', 'Cu'], correct: 0 },
@@ -592,10 +635,54 @@ function showResults() {
   else if (pct >= 60) title = '👏 Good job!';
   else if (pct >= 40) title = '👍 Not bad!';
   document.getElementById('result-title').textContent = title;
+  var finalScore = score * 100;
+  submitLeaderboard('trivia', finalScore);
+  loadLeaderboard('trivia', finalScore);
 }
 
 function playAgain() {
   startTrivia(selectedCategory);
+}
+
+function submitLeaderboard(game, score) {
+  var name = localStorage.getItem('ttt_display_name') || 'Anonymous';
+  fetch(DB_BASE + '/leaderboard/' + game + '.json?auth=' + DB_SECRET, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name, score: score, submittedAt: Date.now() })
+  }).catch(function() {});
+}
+
+function loadLeaderboard(game, myScore) {
+  fetch(DB_BASE + '/leaderboard/' + game + '.json?auth=' + DB_SECRET)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var entries = [];
+      if (data) {
+        for (var key in data) {
+          var e = data[key];
+          entries.push({ name: e.name || 'Anonymous', score: e.score || 0 });
+        }
+        entries.sort(function(a, b) { return b.score - a.score; });
+        entries = entries.slice(0, 10);
+      }
+      var html = '';
+      if (entries.length === 0) {
+        html = '<div class="lb-empty">No scores yet — be the first!</div>';
+      } else {
+        html = '<ol>';
+        for (var i = 0; i < entries.length; i++) {
+          var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+          var cls = entries[i].score === myScore ? ' class="me"' : '';
+          html += '<li' + cls + '><span>' + medal + ' ' + entries[i].name + '</span> <span>' + entries[i].score + '</span></li>';
+        }
+        html += '</ol>';
+      }
+      document.getElementById('lb-content').innerHTML = html;
+    })
+    .catch(function() {
+      document.getElementById('lb-content').innerHTML = '<div class="lb-empty">Could not load leaderboard.</div>';
+    });
 }
 </script>
 </body>

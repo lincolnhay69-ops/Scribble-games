@@ -181,12 +181,12 @@
       max-width: 700px;
       flex: 1;
       align-content: center;
-      justify-items: center;
+      justify-content: center;
     }
     .card {
       aspect-ratio: 1 / 1;
-      width: 100%;
-      max-width: 80px;
+      min-width: 0;
+      min-height: 0;
       border: 2px solid var(--color-border);
       border-radius: 8px;
       display: flex;
@@ -300,13 +300,48 @@
       justify-content: center;
       flex-wrap: wrap;
     }
+    .lb-wrap {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--color-border);
+      max-height: 180px;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .lb-wrap h3 {
+      font-family: var(--font-heading);
+      font-size: 0.85rem;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .lb-wrap ol {
+      list-style: none;
+      padding: 0;
+      font-size: 0.8rem;
+    }
+    .lb-wrap li {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .lb-wrap li.me {
+      background: rgba(0,0,0,0.06);
+      font-weight: 700;
+    }
+    .lb-wrap .lb-empty {
+      text-align: center;
+      opacity: 0.5;
+      font-size: 0.8rem;
+      padding: 8px 0;
+    }
     @media (max-width: 600px) {
-      .card { font-size: 1.1rem; max-width: 60px; }
+      .card { font-size: 1.1rem; }
       .board { gap: 3px; }
       .win-card { padding: 24px 20px; }
     }
     @media (max-width: 400px) {
-      .card { font-size: 0.9rem; max-width: 44px; }
+      .card { font-size: 0.9rem; }
       .board { gap: 2px; }
       .diff-grid { grid-template-columns: 1fr; }
     }
@@ -338,15 +373,15 @@
       </div>
       <div class="diff-card diff-medium" onclick="startGame('medium')">
         <span class="diff-name">Medium</span>
-        <span class="diff-desc">8 × 8 · 32 pairs</span>
+        <span class="diff-desc">6 × 6 · 18 pairs</span>
       </div>
       <div class="diff-card diff-hard" onclick="startGame('hard')">
         <span class="diff-name">Hard</span>
-        <span class="diff-desc">10 × 10 · 50 pairs</span>
+        <span class="diff-desc">8 × 8 · 32 pairs</span>
       </div>
       <div class="diff-card diff-extreme" onclick="startGame('extreme')">
         <span class="diff-name">Extreme</span>
-        <span class="diff-desc">12 × 12 · 72 pairs</span>
+        <span class="diff-desc">10 × 10 · 50 pairs</span>
       </div>
     </div>
   </div>
@@ -374,6 +409,10 @@
     <p id="win-pairs">Pairs matched: 0 / 0</p>
     <p id="win-moves">Moves: 0</p>
     <p id="win-time">Time: 0:00</p>
+    <div class="lb-wrap" id="leaderboard-wrap">
+      <h3>🏆 Leaderboard</h3>
+      <div id="lb-content" class="lb-empty">Loading...</div>
+    </div>
     <div class="btn-row">
       <button class="primary-btn" onclick="closeWin()">Play Again</button>
       <button class="secondary-btn" onclick="goHome()">Menu</button>
@@ -390,11 +429,10 @@ var EMOJIS = [
   '🥕','🥦','🌽','🥬','🥒','🍅','🥔','🧅','🍄','🥜',
   '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵',
   '🐔','🐧','🐦','🦆','🦉','🐺','🐗','🐴','🐝','🐛','🐌','🐢','🐍',
-  '🐙','🐠','🐟','🐡','🐬','🐳','🌸','🌻','🌼','🌿','🍀','🌵','🌴','🌲',
-  '⭐','🌈','🔥','❄️','🎵','🎯','🎸','🎺','🎻','🎲','🎨','🏆'
+  '🐙','🐠','🐟','🐡','🐬','🐳'
 ];
 
-var gridSizes = { easy: 4, medium: 8, hard: 10, extreme: 12 };
+var gridSizes = { easy: 4, medium: 6, hard: 8, extreme: 10 };
 var difficulty = null;
 var gridSize = 4;
 var cards = [];
@@ -569,11 +607,55 @@ function showWin() {
   document.getElementById('win-moves').textContent = 'Moves: ' + moves;
   document.getElementById('win-time').textContent = 'Time: ' + m + ':' + (s < 10 ? '0' : '') + s;
   document.getElementById('win-overlay').classList.add('active');
+  var score = Math.round(pairsFound * 10000 / (moves + s / 10 + 1));
+  submitLeaderboard('memory', score);
+  loadLeaderboard('memory', score);
 }
 
 function closeWin() {
   document.getElementById('win-overlay').classList.remove('active');
   startGame(difficulty);
+}
+
+function submitLeaderboard(game, score) {
+  var name = localStorage.getItem('ttt_display_name') || 'Anonymous';
+  fetch(DB_BASE + '/leaderboard/' + game + '.json?auth=' + DB_SECRET, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name, score: score, submittedAt: Date.now() })
+  }).catch(function() {});
+}
+
+function loadLeaderboard(game, myScore) {
+  fetch(DB_BASE + '/leaderboard/' + game + '.json?auth=' + DB_SECRET)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var entries = [];
+      if (data) {
+        for (var key in data) {
+          var e = data[key];
+          entries.push({ name: e.name || 'Anonymous', score: e.score || 0 });
+        }
+        entries.sort(function(a, b) { return b.score - a.score; });
+        entries = entries.slice(0, 10);
+      }
+      var html = '';
+      if (entries.length === 0) {
+        html = '<div class="lb-empty">No scores yet — be the first!</div>';
+      } else {
+        html = '<ol>';
+        for (var i = 0; i < entries.length; i++) {
+          var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+          var cls = entries[i].score === myScore ? ' class="me"' : '';
+          html += '<li' + cls + '><span>' + medal + ' ' + entries[i].name + '</span> <span>' + entries[i].score + '</span></li>';
+        }
+        html += '</ol>';
+      }
+      document.getElementById('lb-content').innerHTML = html;
+    })
+    .catch(function() {
+      document.getElementById('lb-content').innerHTML = '<div class="lb-empty">Could not load leaderboard.</div>';
+    });
 }
 </script>
 </body>
